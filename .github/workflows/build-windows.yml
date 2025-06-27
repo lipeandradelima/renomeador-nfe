@@ -1,0 +1,66 @@
+name: Build Windows EXE
+
+# Quando executar (quando fizer push ou pull request)
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:  # Permite executar manualmente
+
+jobs:
+  build:
+    runs-on: windows-latest
+    
+    steps:
+    # Baixar o código do repositório
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    # Configurar Python
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+    
+    # Instalar dependências
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install pyinstaller
+        pip install -r requirements.txt
+    
+    # Listar arquivos (para debug)
+    - name: List files
+      run: |
+        dir
+        echo "Current directory contents:"
+    
+    # Criar o executável
+    - name: Build EXE with PyInstaller
+      run: |
+        pyinstaller --onefile --windowed --name="RenomeadorNFe" "RenomearPlus+Mais.py"
+    
+    # Listar conteúdo da pasta dist
+    - name: List dist contents
+      run: |
+        dir dist
+    
+    # Fazer upload do executável
+    - name: Upload EXE artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: RenomeadorNFe-Windows
+        path: dist/RenomeadorNFe.exe
+        retention-days: 30
+    
+    # Criar release (opcional - descomente se quiser)
+    # - name: Create Release
+    #   if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    #   uses: softprops/action-gh-release@v1
+    #   with:
+    #     tag_name: v1.0.${{ github.run_number }}
+    #     name: Release v1.0.${{ github.run_number }}
+    #     files: dist/RenomeadorNFe.exe
+    #   env:
+    #     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
