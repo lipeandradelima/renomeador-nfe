@@ -1,0 +1,117 @@
+# Nome do seu fluxo de trabalho, que aparecerá na aba "Actions" do GitHub
+name: Construir Executáveis para Windows e Mac
+
+# Define quando este fluxo de trabalho deve ser executado
+on:
+  # Executa quando você envia ("push") código para a branch 'main' ou 'master'
+  push:
+    branches: [ main, master ]
+  # Também permite que você execute este fluxo manualmente pela interface do GitHub
+  workflow_dispatch:
+
+jobs:
+  # --- TRABALHO 1: CONSTRUIR A VERSÃO PARA WINDOWS ---
+  build-windows:
+    # Define que este trabalho deve rodar em uma máquina virtual com a última versão do Windows
+    runs-on: windows-latest
+
+    steps:
+      # Passo 1: Baixa o código do seu repositório para a máquina virtual
+      - name: Checkout do código
+        uses: actions/checkout@v4
+
+      # Passo 2: Configura o ambiente Python
+      - name: Configurar Python 3.11
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      # Passo 3: Instala as dependências do seu projeto
+      - name: Instalar dependências
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller pypdf2
+          # Nota: Se você tiver um arquivo requirements.txt, descomente a linha abaixo
+          # pip install -r requirements.txt
+
+      # Passo 4: Constrói o arquivo .exe
+      - name: Construir executável (.exe) com PyInstaller
+        run: pyinstaller --onefile --windowed --name="RenomeadorNFe" "RenomearPlus+Mais.py"
+
+      # Passo 5: Faz o upload do .exe como um "artefato" para ser usado depois
+      - name: Upload do artefato Windows (.exe)
+        uses: actions/upload-artifact@v4
+        with:
+          name: RenomeadorNFe-Windows-exe
+          path: dist/RenomeadorNFe.exe
+
+  # --- TRABALHO 2: CONSTRUIR A VERSÃO PARA MAC ---
+  build-mac:
+    # Define que este trabalho deve rodar em uma máquina virtual com a última versão do macOS
+    runs-on: macos-latest
+
+    steps:
+      # Passos 1 e 2 são idênticos aos do Windows
+      - name: Checkout do código
+        uses: actions/checkout@v4
+      - name: Configurar Python 3.11
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      # Passo 3: Instala as dependências (usando pip3, uma boa prática no Mac)
+      - name: Instalar dependências
+        run: |
+          python3 -m pip install --upgrade pip
+          pip3 install pyinstaller pypdf2
+          # Nota: Se você tiver um arquivo requirements.txt, descomente a linha abaixo
+          # pip3 install -r requirements.txt
+
+      # Passo 4: Constrói o aplicativo .app
+      - name: Construir aplicativo (.app) com PyInstaller
+        run: pyinstaller --onefile --windowed --name="RenomeadorNFe" "RenomearPlus+Mais.py"
+
+      # Passo 5: Comprime o .app em um arquivo .zip (essencial para upload)
+      - name: Comprimir o .app em .zip
+        run: ditto -c -k --sequesterRsrc --keepParent dist/RenomeadorNFe.app dist/RenomeadorNFe_macOS.zip
+
+      # Passo 6: Faz o upload do .zip como um "artefato"
+      - name: Upload do artefato macOS (.zip)
+        uses: actions/upload-artifact@v4
+        with:
+          name: RenomeadorNFe-macOS-zip
+          path: dist/RenomeadorNFe_macOS.zip
+
+  # --- TRABALHO 3: CRIAR A RELEASE NO GITHUB ---
+  create-release:
+    # Este trabalho só começa DEPOIS que os trabalhos 'build-windows' e 'build-mac' terminarem com sucesso
+    needs: [build-windows, build-mac]
+    # Roda em uma máquina Linux (Ubuntu), que é rápida e padrão para tarefas de automação
+    runs-on: ubuntu-latest
+
+    steps:
+      # Passo 1: Baixa o artefato do Windows (.exe) que foi gerado no primeiro trabalho
+      - name: Download do artefato Windows
+        uses: actions/download-artifact@v4
+        with:
+          name: RenomeadorNFe-Windows-exe
+
+      # Passo 2: Baixa o artefato do Mac (.zip) que foi gerado no segundo trabalho
+      - name: Download do artefato macOS
+        uses: actions/download-artifact@v4
+        with:
+          name: RenomeadorNFe-macOS-zip
+
+      # Passo 3: Cria a Release e anexa os dois arquivos baixados
+      - name: Criar Release e anexar executáveis
+        uses: softprops/action-gh-release@v2
+        # Executa apenas se for um push na branch 'main', para não criar releases a cada teste
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        with:
+          # Cria uma tag de versão automática, ex: v1.0.1, v1.0.2, etc.
+          tag_name: v1.0.${{ github.run_number }}
+          name: Release v1.0.${{ github.run_number }}
+          # Anexa todos os arquivos .exe e .zip que foram baixados
+          files: |
+            RenomeadorNFe.exe
+            RenomeadorNFe_macOS.zip
